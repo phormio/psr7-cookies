@@ -1,0 +1,11 @@
+PHP versions
+
+  We chose the supported versions of PHP by looking at the oldest version we
+  can use if we restrict ourselves to using the current release of one or
+  other of the following packages on packagist.org:
+
+    guzzlehttp/psr7
+    zendframework/zend-diactoros
+
+  As it happens, the oldest supported version for each is the same: PHP
+  5.4.0.
