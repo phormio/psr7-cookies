@@ -290,9 +290,9 @@ class FunctionsTest extends \PHPUnit_Framework_TestCase {
     );
   }
 
-  /** @dataProvider provide__func_and_bad_args_and_class */
+  /** @dataProvider provide__func_and_bad_args */
   public function test__with_cookie_list_x__error
-    ($func, $bad_args, $class)
+    ($function_under_test, $bad_args)
   {
     #> Given
 
@@ -304,46 +304,52 @@ class FunctionsTest extends \PHPUnit_Framework_TestCase {
 
     #> When
 
-    try {
-      call_user_func(
-        __NAMESPACE__ . '\\' . $func,
-        $message,
-        $bad_args
-      );
-    } catch (\Exception $exception) {}
+    $call_function_under_test = function ()
+        use ($function_under_test, $message, $bad_args)
+      {
+        call_user_func(
+          __NAMESPACE__ . '\\' . $func,
+          $message,
+          $bad_args
+        );
+      };
+
+    if (interface_exists('Throwable')) {
+      try {
+        call_user_func($call_function_under_test);
+      } catch (\Throwable $throwable) {}
+    } else {
+      try {
+        call_user_func($call_function_under_test);
+      } catch (\Exception $throwable) {}
+    }
 
     #> Then
 
-    $this->assertNotEmpty($exception);
-    $this->assertInstanceOf($class, $exception);
+    $this->assertNotEmpty($throwable);
   }
 
-  public function provide__func_and_bad_args_and_class () {
+  public function provide__func_and_bad_args() {
     return array(
       array(
         'with_cookie_list_set',
         array(),
-        'PHPUnit_Framework_Error_Warning',
       ),
       array(
         'with_cookie_list_set',
         array('x'),
-        'PHPUnit_Framework_Error_Warning',
       ),
       array(
         'with_cookie_list_set',
         array('x', 'y', 'z'),
-        'PHPUnit_Framework_Error',
       ),
       array(
         'with_cookie_list_unset',
         array(),
-        'PHPUnit_Framework_Error_Warning',
       ),
       array(
         'with_cookie_list_unset',
         array('x', 'y'),
-        'PHPUnit_Framework_Error',
       ),
     );
   }
