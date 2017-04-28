@@ -1,6 +1,7 @@
 {
   "name": "phormio/psr7-cookies",
   "description": "Cookies for PSR-7 message objects",
+  "license": "CC0-1.0",
   "require": {
     "php": ">= 5.4",
     "psr/http-message": "^1.0.1"
