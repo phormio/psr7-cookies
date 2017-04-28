@@ -55,6 +55,7 @@ Types are not strict.  For example, a "string" can be a PHP integer;
 an "integer" can be a PHP string that looks like an integer.
 
 If `expire` is an integer,
+or a scalar that looks like an integer,
 it is treated as a Unix timestamp.
 
 Note that a value of zero for `expire` is not treated
@@ -71,6 +72,12 @@ Microsoft Internet Explorer
 or
 Microsoft Edge.
 More information [here](max-age-in-ms-browsers.md).
+
+Every character in `path`:
+
+  * must be in [ASCII](https://en.wikipedia.org/wiki/ASCII);
+  * must be a printable character;
+  * must not be a semicolon.
 
 ## with_cookie_unset
 
@@ -258,7 +265,11 @@ one of the following:
   * turn on assertions and make sure that a failed assertion
   either terminates the program or throws an exception.
 
-If you choose the latter, and
+You won't trip over the preconditions if you
+follow the rules in this documentation, e.g. the rules
+above on `path`.
+
+If you choose the second of the above two options, and
 your application needs to support PHP 5,
 then the following is one possible implementation:
 
