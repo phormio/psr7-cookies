@@ -7,16 +7,30 @@ use DateTime;
   * @internal
   * @param array[] $change_list
   * @return void
-  * @throws \LogicException
+  * @throws \phormio\Psr7Cookies\Exception
   */
 function check_change_list(array $change_list) {
   foreach ($change_list as $index => $member) {
     if (!valid_change($member)) {
-      throw new \LogicException(
+      throw new Exception(
         "Invalid cookie change list: change at index $index is invalid"
       );
     }
   }
+}
+
+/**
+  * @internal
+  * @param string $message
+  * @param mixed $subject
+  * @return \phormio\Psr7Cookies\Exception
+  */
+function exception($message, $subject) {
+  $msg2 = $message;
+  if (stringifiable($subject)) {
+    $msg2 .= ': ' . $subject;
+  }
+  return new Exception($msg2);
 }
 
 /**
@@ -28,32 +42,43 @@ function is_math_integer($x) {
   if (is_float($x)) {
     return fmod($x, 1) == 0;
   } else {
-    return is_scalar($x) && preg_match('@\A-?\d+\z@', $x) === 1;
+    return
+      is_integer($x) ||
+      is_numeric($x) && preg_match('@\.\d*[1-9]@', $x) === 0;
   }
 }
 
 /**
   * @internal
+  * @param mixed $x
   * @return bool
-  * @throws \LogicException
+  */
+function stringifiable($x) {
+  return
+    is_scalar($x) || is_object($x) && method_exists($x, '__toString');
+}
+
+/**
+  * @internal
+  * @return bool
   */
 function valid_change($change) {
   $result = FALSE;
 
-  if (is_array($change) && count($change) >= 1) {
+  if (is_array($change) && count($change) >= 1 && strlen($change[0]) >= 2) {
     $tail = array_slice($change, 1);
 
-    switch ($change[0]) {
+    switch ($change[0]{0}) {
       case '+':
         $result =
-          count($tail) == 2 ||
-          (count($tail) == 3 && is_array($tail[2]));
+          count($tail) == 1 ||
+          (count($tail) == 2 && is_array($tail[1]));
       break;
 
       case '-':
         $result =
-          count($tail) == 1 ||
-          (count($tail) == 2 && is_array($tail[1]));
+          count($tail) == 0 ||
+          (count($tail) == 1 && is_array($tail[0]));
       break;
     }
   }
@@ -81,15 +106,15 @@ function valid_cookie_name($name) {
       array(' ', "\t")
     );
     $tmp = array_map(
-      function ($char) {
-        return preg_quote($char, '@');
+      function ($c) {
+        return preg_quote($c, '@');
       },
       $chars
     );
     $regex = '@\A(' . implode('|', $tmp) . ')+\z@';
   }
 
-  return preg_match($regex, $name) === 1;
+  return stringifiable($name) && preg_match($regex, $name) === 1;
 }
 
 /**
@@ -98,7 +123,7 @@ function valid_cookie_name($name) {
   */
 function valid_cookie_value($value) {
   $regex = '@\A[\x21\x23-\x2B\x2D-\x3A\x3C-\x5B\x5D-\x7E]+\z@';
-  return preg_match($regex, $value) === 1;
+  return stringifiable($value) && preg_match($regex, $value) === 1;
 }
 
 /**
@@ -119,10 +144,14 @@ function valid_domain($domain) {
     \z
   @x';
 
-  return preg_match($regex, $domain) === 1;
+  return stringifiable($domain) && preg_match($regex, $domain) === 1;
 }
 
 /**
+  * TRUE if and only if $expires is a valid expiry time.
+  *
+  * Negative values are accepted.
+  *
   * @internal
   * @return bool
   */
@@ -140,6 +169,11 @@ function valid_expires($expires) {
 }
 
 /**
+  * TRUE if and only if $expires is a valid Max-Age.
+  *
+  * Negative values are accepted, as per the RFC.  See
+  * <https://tools.ietf.org/html/rfc6265#section-5.2.2>.
+  *
   * @internal
   * @return bool
   */
@@ -157,7 +191,7 @@ function valid_path($path) {
     [\x20-\x3A\x3C-\x7E]*
     \z
   @x';
-  return preg_match($regex, $path) === 1;
+  return stringifiable($path) && preg_match($regex, $path) === 1;
 }
 
 /**

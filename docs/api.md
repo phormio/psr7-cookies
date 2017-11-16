@@ -3,22 +3,33 @@
 ## Overview
 
 The API consists of 5 functions in
-the `phormio\Psr7Cookies` namespace.
+the `\phormio\Psr7Cookies` namespace.
 They are:
 
 | Name | Description |
 | --- | --- |
 | `with_cookie_set` | Set a cookie |
-| `with_cookie_unset` | Unset a cookie |
+| `with_cookie_unset` | Delete a cookie in the HTTP client |
 | `with_cookie_list_set` | Set a list of cookies |
-| `with_cookie_list_unset` | Unset a list of cookies |
-| `change_client_cookies` | Allows setting and unsetting cookies |
+| `with_cookie_list_unset` | Delete a list of cookies in the HTTP client |
+| `change_client_cookies` | Allows setting and deleting cookies |
 
-The first argument and return type of each
-function are of type
-`\Psr\Http\Message\MessageInterface`.
+Each function:
 
-All of the functions leave all of their arguments unchanged.
+  * has a first argument and return value of type
+  `\Psr\Http\Message\MessageInterface`;
+
+  * leaves all its arguments unchanged.
+
+## Design note: missing features
+
+The following features, which the package lacks, should probably
+be considered
+as big gaps in its functionality:
+
+  * Deletion of cookies from the HTTP message object (not
+  the HTTP client)
+  * Extraction of cookies from a HTTP request object
 
 ## with_cookie_set
 
@@ -46,13 +57,17 @@ value.
 | --- | --- |
 | `domain` | string |
 | `expire` | integer, `DateTime`, `DateTimeInterface` |
+| `http_only` | mixed, but coerced to bool |
 | `max_age` | integer |
 | `path` | string |
+| `secure` | mixed, but coerced to bool |
 
 There are no mandatory keys.
 
 Types are not strict.  For example, a "string" can be a PHP integer;
 an "integer" can be a PHP string that looks like an integer.
+
+### expire
 
 If `expire` is an integer,
 or a scalar that looks like an integer,
@@ -61,17 +76,20 @@ it is treated as a Unix timestamp.
 Note that a value of zero for `expire` is not treated
 as a special case; it just means
 the start of the Unix epoch
-(in other words, 1970-01-01T00:00:00+0000).
-The behaviour here is different from
-the behaviour of PHP's
-[setcookie](https://secure.php.net/manual/en/function.setcookie.php),
+(1970-01-01T00:00:00+0000).
+This behaviour is different from that of PHP's
+[setcookie](https://secure.php.net/manual/en/function.setcookie.php) function,
 which *does* treat this as a special case.
 
-Note that `max_age` has no effect if the browser is
+### max_age
+
+`max_age` has no effect if the browser is
 Microsoft Internet Explorer
 or
 Microsoft Edge.
 More information [here](max-age-in-ms-browsers.md).
+
+### path
 
 Every character in `path`:
 
@@ -81,10 +99,12 @@ Every character in `path`:
 
 ## with_cookie_unset
 
-This function
+This function deletes the cookie on the client side.
+More formally, it
 puts a `Set-Cookie` field in the HTTP header that will
-erase the cookie on the client side.
-Here is its signature:
+cause the HTTP client to delete its cookie.
+
+Here is the function's signature:
 
 ```php
 /**
@@ -123,27 +143,10 @@ After the `$message` argument come zero or more arrays.
 The semantics of this function are
 best explained
 with an example.
-Here are two blocks of code that have the same semantics:
-
-```php
-$response = with_cookie_list_set(
-  $response,
-  ['city', 'London'],
-  [
-    'country',
-    'UK',
-    [
-      'domain' => 'example.com',
-      'expire' => new \DateTime('+ 1 week'),
-    ]
-  ]
-  [
-    'continent',
-    'Europe',
-    ['path' => '/'],
-  ]
-);
-```
+Following are two blocks of code that have the same semantics.
+Each block sets three cookies.
+The first block makes do without `with_cookie_list_set`; the second
+uses it to improve readability.
 
 ```php
 $response = with_cookie($response, 'city', 'London');
@@ -166,11 +169,43 @@ $response = with_cookie(
 );
 ```
 
+```php
+$response = with_cookie_list_set(
+  $response,
+  ['city', 'London'],
+  [
+    'country',
+    'UK',
+    [
+      'domain' => 'example.com',
+      'expire' => new \DateTime('+ 1 week'),
+    ]
+  ]
+  [
+    'continent',
+    'Europe',
+    ['path' => '/'],
+  ]
+);
+```
+
 ## with_cookie_list_unset
 
-    'with_cookie_list_unset' is to 'with_cookie_unset'
-                              as
-    'with_cookie_list_set'   is to 'with_cookie_set'.
+As `with_cookie_list_set` is to `with_cookie_set`,
+so `with_cookie_list_unset` is to `with_cookie_unset`.
+
+### Example
+
+```php
+$response = with_cookie_list_unset(
+  $response,
+  ['city'],
+  [
+    'country',
+    ['domain' => 'example.com']
+  ]
+);
+```
 
 ## change_client_cookies
 
@@ -180,7 +215,7 @@ Here is an incomplete signature:
 /**
  * @param \Psr\Http\Message\MessageInterface $message
  * @return \Psr\Http\Message\MessageInterface;
- * @throws \LogicException
+ * @throws \phormio\Psr7Cookies\Exception
  */
 function change_client_cookies(MessageInterface $message) {
 }
@@ -192,20 +227,19 @@ arrays.
 The semantics of this function are
 best explained
 with an example.
-Consider the following:
 
 ```php
 $response = change_client_cookies(
   $response,
-  ['+', 'city', 'London', ['domain' => 'x.com']],
-  ['-', 'shopping_cart', ['domain' => 'store.x.com']],
-  ['+', 'country', 'UK']
-  ['-', 'session']
+  ['+city', 'London', ['domain' => 'x.com']],
+  ['-shopping_cart', ['domain' => 'store.x.com']],
+  ['+country', 'UK']
+  ['-session']
 );
 ```
 
-Note that each array argument begins with "+" or "-";
-this is required.
+The first member of each array begins with "+" or "-".
+This is required.
 
 The above code is equivalent to:
 
@@ -235,10 +269,12 @@ $response = without_cookie(
 );
 ```
 
-## Order
+## Exceptions
 
-Here is a boring detail that you probably don't care about
-but which is documented here for completeness.
+All exceptions thrown by this package inherit from
+`\phormio\Psr7Cookies\ExceptionInterface`.
+
+## Order
 
 For
 `with_cookie_list_set`,
@@ -254,57 +290,8 @@ the order in which the arrays are passed to the function.
 
 This behaviour can be observed in the above examples.
 
-## 'assert' is used
+## Reference
 
-The library calls `assert` to set function
-[preconditions](https://en.wikipedia.org/w/index.php?title=Precondition&oldid=713416011).
-Consequently, if you are using this library in an application, you should do
-one of the following:
+[RFC 6265][] is the specification for HTTP cookies.
 
-  * make sure you don't violate the preconditions;
-  * turn on assertions and make sure that a failed assertion
-  either terminates the program or throws an exception.
-
-You won't trip over the preconditions if you
-follow the rules in this documentation, e.g. the rules
-above on `path`.
-
-If you choose the second of the above two options, and
-your application needs to support PHP 5,
-then the following is one possible implementation:
-
-```php
-ini_set('assert.active', 1);
-ini_set('assert.callback', 'handle_assertion_failure');
-
-function handle_assert_failure($file, $line, $code) {
-  $msg = "'assert' failed in $file on line $line";
-
-  if (count(func_num_args()) == 4) {
-    $msg .= ': ' . func_get_arg(3);
-    # This is the $description argument.
-  }
-
-  if ($code !== '') {
-    $msg .= '.  Assertion was: ' . $code;
-  }
-
-  throw new \LogicException($msg);
-}
-```
-
-`assert.callback` must be a string.
-A string such as `SomeClass::someMethod` is valid.
-
-### Assertions in library code
-
-If you are surprised to see assertions used in
-library code, consider the words of
-PHP's [Expectations RFC](https://wiki.php.net/rfc/expectations),
-created in 2013:
-
-> Library code should not shy away from deploying Assertions *everywhere*
-
-Admittedly, this advice is subject to a vague qualification:
-
-> prefix [...] with "when deployed and configured properly".
+[RFC 6265]: https://tools.ietf.org/html/rfc6265

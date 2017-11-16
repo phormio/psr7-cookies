@@ -7,24 +7,11 @@ use Psr\Http\Message\MessageInterface;
 
 /**
   * @return \Psr\Http\Message\MessageInterface
-  * @throws \LogicException
+  * @throws \phormio\Psr7Cookies\Exception
   */
 function change_client_cookies(MessageInterface $message) {
   $list = array_slice(func_get_args(), 1);
   check_change_list($list);
-
-  /*<
-    Design:
-
-      Using an assertion, instead of the above, was considered, and
-      rejected, because if an assertion is used, it does not seem easy to
-      write code which:
-
-        * tells the user (i.e. the programmer) which array element has the
-        problem;
-        * works in PHP 5 and PHP 7;
-        * is not excessively verbose.
-  */
 
   $result = $message;
 
@@ -32,11 +19,13 @@ function change_client_cookies(MessageInterface $message) {
     $func =
       __NAMESPACE__ .
       '\\' .
-      ($array[0] === '+'? 'with_cookie_set': 'with_cookie_unset');
-    $result = call_user_func_array(
-      $func,
-      array($result) + $array
+      ($array[0]{0} === '+'? 'with_cookie_set': 'with_cookie_unset');
+    $cookie_name = substr($array[0], 1);
+    $args = array_merge(
+      array($result, $cookie_name),
+      array_slice($array, 1)
     );
+    $result = call_user_func_array($func, $args);
   }
 
   return $result;
@@ -79,25 +68,50 @@ function with_cookie_set
       are known as attributes.
   */
 {
-  assert(valid_cookie_name($cookie_name));
-  assert(valid_cookie_value($cookie_name));
-  if (array_key_exists('domain', $cookie_attribs)) {
-    assert(valid_domain($cookie_attribs['domain']));
+  if (!valid_cookie_name($cookie_name)) {
+    throw exception('Invalid cookie name', $cookie_name);
   }
+
+  if (!valid_cookie_value($cookie_name)) {
+    throw exception('Invalid cookie value', $cookie_value);
+  }
+
+  if (array_key_exists('domain', $cookie_attribs)) {
+    if (!valid_domain($cookie_attribs['domain'])) {
+      throw exception(
+        'Invalid cookie domain', $cookie_attribs['domain']
+      );
+    }
+  }
+
   if (array_key_exists('expires', $cookie_attribs)) {
-    assert(valid_expires($cookie_attribs['expires']));
-  }
-  if (array_key_exists('max_age', $cookie_attribs)) {
-    assert(valid_max_age($cookie_attribs['max_age']));
-  }
-  if (array_key_exists('path', $cookie_attribs)) {
-    assert(valid_path($cookie_attribs['path']));
+    if (!valid_expires($cookie_attribs['expires'])) {
+      throw exception(
+        "Invalid 'expires' value", $cookie_attribs['expires']
+      );
+    }
   }
 
-  $field_value = $cookie_name . '=' . $cookie_value;
+  if (array_key_exists('max_age', $cookie_attribs)) {
+    if (!valid_max_age($cookie_attribs['max_age'])) {
+      throw exception(
+        "Invalid 'max_age' value", $cookie_attribs['max_age']
+      );
+    }
+  }
+
+  if (array_key_exists('path', $cookie_attribs)) {
+    if (!valid_path($cookie_attribs['path'])) {
+      throw exception(
+        'Invalid cookie path', $cookie_attribs['path']
+      );
+    }
+  }
+
+  $header_field_value = $cookie_name . '=' . $cookie_value;
 
   if (array_key_exists('domain', $cookie_attribs)) {
-    $field_value .= '; Domain=' . $cookie_attribs['domain'];
+    $header_field_value .= '; Domain=' . $cookie_attribs['domain'];
   }
 
   if (array_key_exists('expires', $cookie_attribs)) {
@@ -108,35 +122,31 @@ function with_cookie_set
       $time = new DateTime('@' . $expires);
     }
     $time->setTimeZone(new DateTimeZone('UTC'));
-    $field_value .=
+    $header_field_value .=
       '; Expires=' . $time->format('D, d M Y H:i:s') . ' GMT';
-    /*<
-      We are not using DateTime::RFC1123 as the format because that
-      produces a numeric timezone, not "GMT".
-    */
   }
 
   if (array_key_exists('http_only', $cookie_attribs) &&
     $cookie_attribs['http_only'])
   {
-    $field_value .= '; HttpOnly';
+    $header_field_value .= '; HttpOnly';
   }
 
   if (array_key_exists('max_age', $cookie_attribs)) {
-    $field_value .= '; Max-Age=' . $cookie_attribs['max_age'];
+    $header_field_value .= '; Max-Age=' . $cookie_attribs['max_age'];
   }
 
   if (array_key_exists('path', $cookie_attribs)) {
-    $field_value .= '; Path=' . $cookie_attribs['path'];
+    $header_field_value .= '; Path=' . $cookie_attribs['path'];
   }
 
   if (array_key_exists('secure', $cookie_attribs) &&
     $cookie_attribs['secure'])
   {
-    $field_value .= '; Secure';
+    $header_field_value .= '; Secure';
   }
 
-  return $message->withAddedHeader('Set-Cookie', $field_value);
+  return $message->withAddedHeader('Set-Cookie', $header_field_value);
 }
 
 /**

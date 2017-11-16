@@ -2,10 +2,37 @@
 namespace phormio\Psr7Cookies;
 
 use DateTime;
+use DomDocument;
 use Phake;
 
 class FunctionsTest extends \PHPUnit_Framework_TestCase {
   const MESSAGE_INTERFACE_FQCN = '\Psr\Http\Message\MessageInterface';
+
+  /** @dataProvider provide__is_math_integer */
+  public function test__is_math_integer($candidate, $expected_result) {
+    $this->assertSame($expected_result, is_math_integer($candidate));
+  }
+
+  public function provide__is_math_integer() {
+    return array(
+      array(1, TRUE),
+      array(2, TRUE),
+      array(3.0, TRUE),
+      array('3.0e10', TRUE),
+      array('.000', TRUE),
+      array('-0', TRUE),
+      array(-4000, TRUE),
+
+      array(1.1, FALSE),
+      array('x', FALSE),
+      array('0.0010', FALSE),
+      array('3.0010e9', FALSE),
+      array('3e1.2', FALSE),
+      array(INF, FALSE),
+      array(NAN, FALSE),
+      array(self::stringifiableObject('100'), FALSE),
+    );
+  }
 
   public function test__with_cookie_set__basic() {
     #> Given
@@ -59,11 +86,16 @@ class FunctionsTest extends \PHPUnit_Framework_TestCase {
     );
   }
 
-  /** @dataProvider provideInvalidAttributes */
+  /** @dataProvider provide__invalid_attributes */
   public function test__with_cookie_set__invalid_attributes
     (array $attributes)
   {
+    #> Given
+
     $message = Phake::mock(self::MESSAGE_INTERFACE_FQCN);
+    $exception = NULL;
+
+    #> When
 
     try {
       with_cookie_set(
@@ -72,13 +104,14 @@ class FunctionsTest extends \PHPUnit_Framework_TestCase {
         'London',
         $attributes
       );
-    } catch (\PHPUnit_Framework_Error_Warning $exception) {}
+    } catch (ExceptionInterface $exception) {}
 
-    $this->assertNotEmpty($exception);
-    $this->assertTrue(self::traceContainsAssert($exception));
+    #> Then
+
+    $this->assertNotNull($exception);
   }
 
-  public function provideInvalidAttributes() {
+  public function provide__invalid_attributes() {
     return array(
       array(array('domain' => '')),
       array(array('domain' => 'a/b')),
@@ -239,13 +272,9 @@ class FunctionsTest extends \PHPUnit_Framework_TestCase {
 
     change_client_cookies(
       $message,
-      array('+', 'city', 'London', array('domain' => 'x.com')),
-      array('-', 'spice', array('domain' => 'y.com')),
-      array(
-        '-',
-        'jewel',
-        array('domain' => 'y.com', 'path' => '/z'),
-      )
+      array('+city', 'London', array('domain' => 'x.com')),
+      array('-spice', array('domain' => 'y.com')),
+      array('-jewel', array('domain' => 'y.com', 'path' => '/z'))
     );
 
     #> Then
@@ -270,22 +299,31 @@ class FunctionsTest extends \PHPUnit_Framework_TestCase {
   public function test__change_client_cookies__invalid_input
     ($invalid_input)
   {
+    #> Given
+
     $message = Phake::mock(self::MESSAGE_INTERFACE_FQCN);
+    $exception = NULL;
 
-    $this->setExpectedException('LogicException');
+    #> When
 
-    change_client_cookies(
-      $message,
-      $invalid_input
-    );
+    try {
+      change_client_cookies(
+        $message,
+        $invalid_input
+      );
+    } catch (ExceptionInterface $exception) {}
+
+    #> Then
+
+    $this->assertNotNull($exception);
   }
 
   public function provide__invalid_input_for_change_client_cookies() {
     return array(
       array(1),
       array(array(1, 2)),
-      array(array('+', 'city', 'London', 'not-an-array')),
-      array(array('-', 'city', 'not-an-array')),
+      array(array('+city', 'London', 'not-an-array')),
+      array(array('-city', 'not-an-array')),
       array(array('-')),
     );
   }
@@ -302,8 +340,6 @@ class FunctionsTest extends \PHPUnit_Framework_TestCase {
       ->withAddedHeader(Phake::anyParameters())
       ->thenReturn($message);
 
-    #> When
-
     $call_function_under_test = function ()
         use ($function_under_test, $message, $bad_args)
       {
@@ -314,19 +350,13 @@ class FunctionsTest extends \PHPUnit_Framework_TestCase {
         );
       };
 
-    if (interface_exists('Throwable')) {
-      try {
-        call_user_func($call_function_under_test);
-      } catch (\Throwable $throwable) {}
-    } else {
-      try {
-        call_user_func($call_function_under_test);
-      } catch (\Exception $throwable) {}
-    }
+    #> When
+
+    $throws_exception = self::throwsException($call_function_under_test);
 
     #> Then
 
-    $this->assertNotEmpty($throwable);
+    $this->assertTrue($throws_exception);
   }
 
   public function provide__func_and_bad_args() {
@@ -355,22 +385,33 @@ class FunctionsTest extends \PHPUnit_Framework_TestCase {
   }
 
   /**
-    * @return bool TRUE iff the trace for $exception contains a call to PHP's built-in `assert' function.
+    * @return object An object with a __toString method that returns $string
     */
-  private static function traceContainsAssert(\Exception $exception) {
-    $result = FALSE;
+  private static function stringifiableObject($string) {
+    $doc = new DomDocument;
+    $doc->loadXml("<root/>");
+    $doc->documentElement->appendChild($doc->createTextNode($string));
+    return simplexml_import_dom($doc->documentElement);
+  }
 
-    foreach ($exception->getTrace() as $frame) {
-      $has_assert =
-        $frame['function'] === 'assert' &&
-          !array_key_exists('class', $frame);
+  /**
+    * @callable $callable
+    * @return bool
+    * @throws void
+    */
+  private static function throwsException($callable) {
+    $throwable = NULL;
 
-      if ($has_assert) {
-        $result = TRUE;
-        break;
-      }
+    if (interface_exists('Throwable')) {
+      try {
+        call_user_func($callable);
+      } catch (\Throwable $throwable) {}
+    } else {
+      try {
+        call_user_func($callable);
+      } catch (\Exception $throwable) {}
     }
 
-    return $result;
+    return is_object($throwable);
   }
 }

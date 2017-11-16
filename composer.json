@@ -8,9 +8,12 @@
   },
   "autoload": {
     "files": [
-      "src/functions.php",
-      "src/internal.php"
-    ]
+      "src/functions/public.php",
+      "src/functions/internal.php"
+    ],
+    "psr-4": {
+      "phormio\\Psr7Cookies\\": "src/classes/"
+    }
   },
   "require-dev": {
     "phake/phake": "^2.3.2",
