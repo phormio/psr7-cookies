@@ -25,7 +25,7 @@ Each function:
 
 The following features, which the package lacks, should probably
 be considered
-as big gaps in its functionality:
+as gaps in its functionality:
 
   * Deletion of cookies from the HTTP message object (not
   the HTTP client)
