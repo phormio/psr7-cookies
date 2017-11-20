@@ -290,7 +290,7 @@ the order in which the arrays are passed to the function.
 
 This behaviour can be observed in the above examples.
 
-## Reference
+# Reference
 
 [RFC 6265][] is the specification for HTTP cookies.
 
